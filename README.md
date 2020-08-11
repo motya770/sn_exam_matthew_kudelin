@@ -1,5 +1,5 @@
 Input and output files are located in /src/main/resources/
-You can run this project as java main file in IDE. (Based on Spring Boot). 
+You can run this project as java main file ServiceNowExamApplication.java in IDE. (Based on Spring Boot). 
 
 This code complexity is  O(n + n^2) because I read all lines O(n) and also use foreach inside foreach - which leads to O(n^2). 
 This algorithm doesn’t scale well, because of the complexity and because of the reading all lines at once to the memory.
