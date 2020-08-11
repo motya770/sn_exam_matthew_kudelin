@@ -8,8 +8,10 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 
-import java.io.BufferedReader;
-import java.io.FileReader;
+import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.nio.file.attribute.FileAttribute;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.*;
@@ -24,6 +26,9 @@ public class LineParserService implements ILineParserService {
 
     @Value("${input.file.path}")
     Resource resourceFile;
+
+    @Value("${output.file.path}")
+    String outputFile;
 
     private static final int F_START_WORDS_INDEX = 2;
 
@@ -62,7 +67,9 @@ public class LineParserService implements ILineParserService {
     }
 
     private void printLineGroups(Set<LineGroup> lineGroups){
-        System.out.println("=====");
+        StringBuilder builder= new StringBuilder();
+
+        builder.append("=====\n");
         lineGroups.forEach(lineGroup -> {
 
             Collection<Line> lines = lineGroup.getLines();
@@ -70,17 +77,32 @@ public class LineParserService implements ILineParserService {
             for(Line line: lines){
                 String[] words = line.getContent();
                 for(String word: words){
-                    System.out.print(word + " ");
+                    builder.append(word + " ");
                 }
-                System.out.println();
+                builder.append("\n");
             }
 
-            System.out.print("The changing word was:");
-            lineGroup.getChangedWords().forEach(changedWord-> System.out.print(changedWord + ", "));
-            System.out.println("\n");
+            builder.append("The changing word was:");
+            lineGroup.getChangedWords().forEach(changedWord-> builder.append(changedWord + ", "));
+            builder.append("\n\n");
 
         });
-        System.out.println("=====");
+        builder.append("=====\n");
+
+        System.out.println(builder);
+
+        File file=null;
+        try {
+            file = new File(outputFile);
+        }catch (Exception e){
+            log.error("{}", e);
+        }
+        try (BufferedWriter br = new BufferedWriter(new FileWriter(file))) {
+            br.write(builder.toString());
+        }catch (Exception e){
+            log.error("{}", e);
+        }
+
     }
 
     private LineGroup createLineGroup(List<Line> lines, Line searchLine, int searchIndex){
@@ -123,7 +145,7 @@ public class LineParserService implements ILineParserService {
                     continue;
                 }
 
-                addToLineGroup(lineGroup, searchLine, currentLine, changingWordIndex, j);
+                addToLineGroup(lineGroup, searchLine, currentLine, changingWordIndex);
             }catch (Exception e){
                 log.error("{}", e);
             }
@@ -202,7 +224,7 @@ public class LineParserService implements ILineParserService {
         return changingWordIndex;
     }
 
-    private void addToLineGroup(LineGroup lineGroup, Line searchLine, Line currentLine, int changingWordIndex, int j) {
+    private void addToLineGroup(LineGroup lineGroup, Line searchLine, Line currentLine, int changingWordIndex) {
         if (!lineGroup.isSearchIsAdded()) {
             lineGroup.getLines().add(searchLine);
         }
