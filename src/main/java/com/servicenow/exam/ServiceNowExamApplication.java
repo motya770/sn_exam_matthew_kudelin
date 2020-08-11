@@ -1,7 +1,6 @@
 package com.servicenow.exam;
 
-import com.servicenow.exam.service.ILineParserService;
-import com.servicenow.exam.service.impl.FastLineParserService;
+import com.servicenow.exam.service.impl.LineParserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
@@ -11,7 +10,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 public class ServiceNowExamApplication implements CommandLineRunner {
 
     @Autowired
-    private FastLineParserService lineParserService;
+    private LineParserService lineParserService;
 
     @Override
     public void run(String... args) throws Exception {

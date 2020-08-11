@@ -18,6 +18,10 @@ import java.util.*;
 @Service
 public class LineParserService implements ILineParserService {
 
+    public static final int STARTING_CHANGING_WORD_INDEX = -1;
+    public static final int FIRST_INDEX_AFTER_DATETIME = 2;
+
+
     @Value("${input.file.path}")
     Resource resourceFile;
 
@@ -82,75 +86,129 @@ public class LineParserService implements ILineParserService {
     private LineGroup createLineGroup(List<Line> lines, Line searchLine, int searchIndex){
 
         LineGroup lineGroup = new LineGroup();
+        List<Line> sameLines = new ArrayList<>();
+        int changingWordIndex = STARTING_CHANGING_WORD_INDEX;
+
         for(int j = 0; j < lines.size(); j++){
-            if(j==searchIndex){
-                continue;
-            }
-
-            Line currentLine = lines.get(j);
-            //if(currentLine.isInGroup()){
-              //  continue;
-            //}
-
-            String[] searchLineContent = searchLine.getContent();
-            String[] currentContent = currentLine.getContent();
-
-            if(searchLineContent.length != currentContent.length){
-                continue;
-            }
-
-            int counterNotSameWord=0;
-            String firstWord = null;
-            String secondWord = null;
-
-            for(int i= F_START_WORDS_INDEX; i < searchLineContent.length; i++){
-                if(!searchLineContent[i].equals(currentContent[i])){
-                    counterNotSameWord++;
-                    firstWord = searchLineContent[i];
-                    secondWord = currentContent[i];
+            try {
+                if (j == searchIndex) {
+                    continue;
                 }
-                if(counterNotSameWord>1){
-                    break;
-                }
-            }
 
-            if(counterNotSameWord==1){
-                if( lineGroup.getChangedWords().size()==0 || lineGroup.getChangedWords().contains(firstWord)) {
+                Line currentLine = lines.get(j);
 
-                    addToLineGroup(searchLine, lineGroup, j, currentLine, firstWord, secondWord);
-                    //searchLine.setInGroup(true);
-                    //currentLine.setInGroup(true);
+                if (searchLine.getContent().length != currentLine.getContent().length) {
+                    continue;
                 }
+
+                //if can use it because we walt all same lines to be in the group
+                if (checkIfSame(searchLine, currentLine)) {
+                    sameLines.add(currentLine);
+                    continue;
+                }
+
+                //find index of one changed word in two lines - only one per sentence
+                if (changingWordIndex == STARTING_CHANGING_WORD_INDEX) {
+                    changingWordIndex = findChangingIndex(searchLine, currentLine);
+                }
+
+                // lines are not in the group
+                if (changingWordIndex == STARTING_CHANGING_WORD_INDEX) {
+                    continue;
+                }
+
+                boolean found = checkLineIsSameExceptIndex(changingWordIndex, searchLine, currentLine);
+
+                if (!found) {
+                    continue;
+                }
+
+                addToLineGroup(lineGroup, searchLine, currentLine, changingWordIndex, j);
+            }catch (Exception e){
+                log.error("{}", e);
             }
         }
 
-        Collections.sort(lineGroup.getLines(), new Comparator<Line>() {
-            @Override
-            public int compare(Line line1, Line line2) {
-                try {
-                    SimpleDateFormat format  =new SimpleDateFormat("dd-MM-yyyy HH:mm:ss");
+        if(changingWordIndex>STARTING_CHANGING_WORD_INDEX){
+            lineGroup.getLines().addAll(sameLines);
+        }
 
-                    Date date1=format.parse(line1.getContent()[0] + " " + line1.getContent()[1]);
-                    Date date2=format.parse(line2.getContent()[0] + " " + line2.getContent()[1]);
-
-                    return date1.compareTo(date2);
-                } catch (ParseException e) {
-                    log.error("", e);
-                }
-                return 0;
-            }
-        });
+        sortLines(lineGroup);
 
         return lineGroup;
     }
 
-    private void addToLineGroup(Line searchLine, LineGroup lineGroup, int j, Line currentLine, String firstWord, String secondWord) {
+    private void sortLines(LineGroup lineGroup) {
+        Comparator<Line> comparatorByDate =
+                (Line line1, Line line2) ->
+                {
+                    try {
+                        SimpleDateFormat format  =new SimpleDateFormat("dd-MM-yyyy HH:mm:ss");
+
+                        Date date1=format.parse(line1.getContent()[0] + " " + line1.getContent()[1]);
+                        Date date2=format.parse(line2.getContent()[0] + " " + line2.getContent()[1]);
+
+                        int result = date1.compareTo(date2);
+                        if(result!=0){
+                            return result;
+                        }
+
+                        for(int i=FIRST_INDEX_AFTER_DATETIME; i<line1.getContent().length; i++){
+                            result = line1.getContent()[i].compareTo(line2.getContent()[i]);
+                            if(result!=-0){
+                                return result;
+                            }
+                        }
+
+                    } catch (ParseException e) {
+                        log.error("", e);
+                    }
+                    return 0;
+                };
+
+        Collections.sort(lineGroup.getLines(), comparatorByDate);
+    }
+
+    private boolean checkIfSame(Line searchLine, Line currentLine){
+        return Arrays.equals(searchLine.getContent(), currentLine.getContent());
+    }
+
+    private boolean checkLineIsSameExceptIndex(int changingWordIndex, Line searchLine, Line currentLine){
+        for(int i = FIRST_INDEX_AFTER_DATETIME; i<searchLine.getContent().length; i++){
+            if(i == changingWordIndex){
+                continue;
+            }
+
+            if(!searchLine.getContent()[i].equals(currentLine.getContent()[i])){
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private int findChangingIndex(Line searchLine, Line currentLine){
+        int changingWordIndex = STARTING_CHANGING_WORD_INDEX;
+        int counterNotSameWord=0;
+        for(int i= F_START_WORDS_INDEX; i < searchLine.getContent().length; i++){
+            if(!searchLine.getContent()[i].equals(currentLine.getContent()[i])){
+                counterNotSameWord++;
+                changingWordIndex = i;
+            }
+            if(counterNotSameWord > 1){
+                return STARTING_CHANGING_WORD_INDEX;
+            }
+        }
+        return changingWordIndex;
+    }
+
+    private void addToLineGroup(LineGroup lineGroup, Line searchLine, Line currentLine, int changingWordIndex, int j) {
         if (!lineGroup.isSearchIsAdded()) {
             lineGroup.getLines().add(searchLine);
         }
         lineGroup.getLines().add(currentLine);
         lineGroup.setSearchIsAdded(true);
-        lineGroup.getChangedWords().add(firstWord + " " + j);
-        lineGroup.getChangedWords().add(secondWord + " " + j);
+        lineGroup.getChangedWords().add(searchLine.getContent()[changingWordIndex]);
+        lineGroup.getChangedWords().add(currentLine.getContent()[changingWordIndex]);
     }
 }
